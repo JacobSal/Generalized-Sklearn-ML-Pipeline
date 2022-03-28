@@ -26,8 +26,8 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 
-import localPkg.preproc as ProcessPipe
-import localPkg.datmgmt as DataManager
+from localPkg.preproc import ProcessPipe
+from localPkg.datmgmt import DataManager
 
 #%% PATHS 
 # Path to file
@@ -43,7 +43,11 @@ modelDir = abspath(join(saveBin,"saveKNN"))
 # Path to cross-validated files
 cvDatDir = abspath(join(cfpath,"..","c_dataValidation","saveBin"))
 # Make directory for saves
-mkdir(abspath(join(modelDir)))
+try:
+  mkdir(abspath(join(modelDir)))
+except FileExistsError:
+  print('Save folder for model already exists!')
+#endtry
 
 #%% DEFINITIONS & PARAMS
 def robust_save(fname):
@@ -52,17 +56,19 @@ def robust_save(fname):
 
 #%% PARAMS
 param_grid = {'kneighborsclassifier__n_neighbors':[5,7,10,13,15,18,20]}
-dTime = '12242021' #date.today().strftime('%d%m%Y')
+dTime = '19032022' #date.today().strftime('%d%m%Y')
 
-#%% Load k-split Data (k=10)
+#%%
 tmpSaveDir = join(cvDatDir, ('CVjoined_data_'+dTime+'.pkl'))
 tmpSave = DataManager.load_obj(tmpSaveDir)
 X_train = tmpSave[0]
 X_test = tmpSave[1]
 y_train = tmpSave[2]
+y_train = y_train.reshape(len(y_train),1)
 y_test = tmpSave[3]
+y_test = y_test.reshape(len(y_test),1)
 X = np.vstack((X_train,X_test))
-y = np.vstack((y_train,y_test))
+y = np.ravel(np.vstack((y_train,y_test)))
 print("y_train: " + str(np.unique(y_train)))
 print("y_test: " + str(np.unique(y_test)))
 
@@ -97,7 +103,7 @@ pipe_knn.set_params(kneighborsclassifier__n_neighbors = 7)
 
 #%% MODEL FITTING
 model = pipe_knn.fit(X_train,y_train)
-y_score = model.decision_function(X_test)
+#y_score = model.decision_function(X_test)
 print(model.score(X_test,y_test))
 filename = join(modelDir,('fittedKNN_'+dTime+'.sav'))
 pickle.dump(model, open(filename, 'wb'))
@@ -105,8 +111,8 @@ print('done')
 
 y_predict = model.predict(X_test)
 y_train_predict = model.predict(X_train)
-print('RF Train accuracy',accuracy_score(y_train, y_train_predict))
-print('RF Test accuracy',accuracy_score(y_test,y_predict))
+print('KNN Train accuracy',accuracy_score(y_train, y_train_predict))
+print('KNN Test accuracy',accuracy_score(y_test,y_predict))
 #%% CROSS VALIDATE
 scores = cross_val_score(estimator = pipe_knn,
                           X = X,

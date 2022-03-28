@@ -155,8 +155,8 @@ print('done.')
 
 y_predict = model.predict(X_test)
 y_train_predict = model.predict(X_train)
-print('RF Train accuracy',accuracy_score(y_train, y_train_predict))
-print('RF Test accuracy',accuracy_score(y_test,y_predict))
+print('SVM Train accuracy',accuracy_score(y_train, y_train_predict))
+print('SVM Test accuracy',accuracy_score(y_test,y_predict))
 #%% CROSS VALIDATION
 scores = cross_val_score(estimator = model,
                           X = X,

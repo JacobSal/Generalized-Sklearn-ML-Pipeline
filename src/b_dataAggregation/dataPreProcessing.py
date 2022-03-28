@@ -48,10 +48,10 @@ def directoryHandler(dirDir):
 if __name__ == '__main__':
     print("Number of processors: ", mp.cpu_count())
     #%% Loop Start - Basic Loop
-    print('Starting PreProcessing Pipeline...')
-    for i in im_list:
-        result = ProcessPipe.mainLoop(i)
-        break
+    # print('Starting PreProcessing Pipeline...')
+    # for i in im_list:
+    #     result = ProcessPipe.mainLoop(i)
+    #     break
     #endfor
 
     #%% Loop Start - multiprocessing documentation ex
@@ -69,9 +69,9 @@ if __name__ == '__main__':
     #endwith
 
     #%% Loop Start - async-multi processing num. 1
-    # from joblib import Parallel, delayed
-    # threadN = mp.cpu_count()
-    # results = Parallel(n_jobs=threadN)(delayed(ProcessPipe.mainLoop)(i) for i in im_list) # only one that works? (03/04/2022)
+    from joblib import Parallel, delayed
+    threadN = mp.cpu_count()
+    results = Parallel(n_jobs=threadN)(delayed(ProcessPipe.mainLoop)(i) for i in im_list) # only one that works? (03/04/2022)
 
     #%% Loop Start - async-multi processing num. 2
     # pool = mp.Pool(mp.cpu_count())

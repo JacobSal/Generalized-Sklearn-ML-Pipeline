@@ -25,7 +25,7 @@ from sklearn.ensemble import  RandomForestClassifier
 
 from xgboost import XGBClassifier
 
-import localPkg.datamgmt as DataManager
+from localPkg.datmgmt import DataManager
 
 #%% PATHS 
 # Path to file
@@ -37,11 +37,15 @@ saveBin = join(cfpath,"saveBin")
 # Path to training files
 trainDatDir = abspath(join(cfpath,"..","b_dataAggregation","processedData","EL-11122021"))
 # Path to model
-modelDir = abspath(join(saveBin,"saveDT"))
+modelDir = abspath(join(saveBin,"saveRF"))
 # Path to cross-validated files
 cvDatDir = abspath(join(cfpath,"..","c_dataValidation","saveBin"))
 # Make directory for saves
-mkdir(abspath(join(modelDir)))
+try:
+  mkdir(abspath(join(modelDir)))
+except FileExistsError:
+  print('Save folder for model already exists!')
+#endtry
 
 #%% DEFINITIONS & PARAMS
 def robust_save(fname):
@@ -49,17 +53,19 @@ def robust_save(fname):
 #enddef
 
 #%% PARAMS
-dTime = '12242021' #date.today().strftime('%d%m%Y')
+dTime = '19032022' #date.today().strftime('%d%m%Y')
 
-#%% Load k-split Data (k=10)
+#%%
 tmpSaveDir = join(cvDatDir, ('CVjoined_data_'+dTime+'.pkl'))
 tmpSave = DataManager.load_obj(tmpSaveDir)
 X_train = tmpSave[0]
 X_test = tmpSave[1]
 y_train = tmpSave[2]
+y_train = y_train.reshape(len(y_train),1)
 y_test = tmpSave[3]
+y_test = y_test.reshape(len(y_test),1)
 X = np.vstack((X_train,X_test))
-y = np.vstack((y_train,y_test))
+y = np.ravel(np.vstack((y_train,y_test)))
 print("y_train: " + str(np.unique(y_train)))
 print("y_test: " + str(np.unique(y_test)))
 
@@ -78,7 +84,7 @@ RFmodel = RandomForestClassifier(max_depth = coef[0], min_samples_split = coef[1
 #%% MODEL FITTING
 print('fitting...')
 model = RFmodel.fit(X_train,y_train)
-y_score = model.decision_function(X_test)
+#y_score = model.decision_function(X_test)
 print(model.score(X_test,y_test))
 filename = join(modelDir,('fittedRF_'+dTime+'.sav'))
 pickle.dump(model, open(filename, 'wb'))
@@ -90,16 +96,16 @@ print('RF Train accuracy',accuracy_score(y_train, y_train_predict))
 print('RF Test accuracy',accuracy_score(y_test,y_predict))
 
 #%% Cross Validate
-scores = cross_val_score(estimator = model,
-                          X = X,
-                          y = y,
-                          cv = 10,
-                          scoring = 'roc_auc',
-                          verbose = True,
-                          n_jobs=-1)
+# scores = cross_val_score(estimator = model,
+#                           X = X,
+#                           y = y,
+#                           cv = 10,
+#                           scoring = 'roc_auc',
+#                           verbose = True,
+#                           n_jobs=-1)
 
-print('RF CV accuracy scores: %s' % scores)
-print('RF CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
+# print('RF CV accuracy scores: %s' % scores)
+# print('RF CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
 
 #Best coefficients so far:
     #coef = [671,10,68,3,650,87,462]

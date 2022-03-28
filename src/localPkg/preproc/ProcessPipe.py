@@ -726,8 +726,8 @@ def create_data(datX,imNum,**kwargs):
         yTrain = np.vstack(yTrain).astype(int)
         imArr = np.tile(imNum,yTrain.shape)
         yTrain = np.hstack((yTrain,imArr))
-        if not domains:
-            yTrain = np.hstack((yTrain,domain))
+        if domains:
+            yTrain = np.hstack((yTrain,domains))
         #endif
         return [outX, yTrain]
     #endif
