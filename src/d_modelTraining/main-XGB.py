@@ -12,11 +12,13 @@ from os import mkdir
 import dill as pickle
 
 from sklearn.svm import SVC
-from sklearn.model_selection import cross_val_score
+from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.metrics import   accuracy_score
 from sklearn.ensemble import  RandomForestClassifier
 
 from xgboost import XGBClassifier
+
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 
 from localPkg.datmgmt import DataManager
 
@@ -46,6 +48,25 @@ def robust_save(fname):
     plt.savefig(join(saveBin,'overlayed_predictions.png',dpi=200,bbox_inches='tight'))
 #enddef
 
+def objective(space):
+    clf=XGBClassifier(
+                    n_estimators =space['n_estimators'], max_depth = int(space['max_depth']), gamma = space['gamma'],
+                    reg_alpha = int(space['reg_alpha']),min_child_weight=int(space['min_child_weight']),
+                    colsample_bytree=int(space['colsample_bytree']))
+    
+    evaluation = [( X_train, y_train), ( X_test, y_test)]
+    
+    clf.fit(X_train, y_train,
+            eval_set=evaluation, eval_metric="auc",
+            early_stopping_rounds=10,verbose=False)
+    
+
+    pred = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, pred>0.5)
+    print ("SCORE:", accuracy)
+    return {'loss': -accuracy, 'status': STATUS_OK }
+#enddef
+
 #%% PARAMS
 dTime = '19032022' #date.today().strftime('%d%m%Y')
 
@@ -70,11 +91,61 @@ print('XGBoost:')
 print("starting modeling career...")
 coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
 XGBmodel = XGBClassifier(max_depth = coef[0],subsample = coef[1],n_estimators = coef[2],
-                      colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate=coef[5], 
+                      colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate = coef[5], 
                       min_child_weight = coef[6], random_state = coef[7],reg_alpha = coef[8],
                       reg_lambda = coef[9])
 
 #%% GRID SEARCH
+# print("Gridsearch with cross-validation initializing...")
+
+# #Parameter Grid with ranges
+# param_grid = {'max_depth': [2,50], #(0,9999), typical: 3-10  
+#               'subsample': [0.5,1], #[0,1], typical values: 0.5-1  
+#               'n_estimators': [50,200], #[0,9999], 
+#               'colsample_bylevel': [0.5,1], #[0,1] ,
+#               'colsample_bytree': [0.5,1], #[0,1],
+#                'learning_rate': [0.1,0.36] , #(0,1), typical: 0.01-0.2
+#                'min_child_weight': [1,50], #(0,9999),
+#                'alpha': [0.5,1], #[0,1],
+#                'lambda': [0.5,1], #[0,1]}
+
+# #Gridsearch with cross-validation
+# xgb_gridsearch = GridSearchCV(estimator = XGBClassifier(), 
+#                         param_grid = param_grid,
+#                         scoring = 'f1',
+#                         cv = 1, 
+#                         verbose = 2, 
+#                         n_jobs = -1)
+
+# #xgb_grid.fit(X_train,y_train)
+# bestparams = xgb_gridsearch.best_params_
+# print(bestparams)
+
+#%% BAYESIAN OPTIMIZATION WITH HYPEROPT
+
+#Domain space
+space = {'max_depth': hp.quniform("max_depth",3,18,1), #(0,9999), typical: 3-10
+              'gamma': hp.uniform ('gamma', 1,9),
+              'colsample_bytree' : hp.uniform('colsample_bytree', 0.5,1),
+               'min_child_weight' : hp.quniform('min_child_weight', 0, 10, 1),
+               'reg_alpha' : hp.quniform('reg_alpha', 40,180,1),
+               'reg_lambda' : hp.uniform('reg_lambda', 0,1),
+               'n_estimators': 180,
+               'seed': 0
+               }
+
+#Run optimization algorithm
+print("Bayesian optimization initializing...")
+trials = Trials()
+
+best_hyperparams = fmin(fn = objective,
+                        space = space,
+                        algo = tpe.suggest,
+                        max_evals = 100,
+                        trials = trials)
+
+print("The best hyperparameters are : ","\n")
+print(best_hyperparams)
 
 
 

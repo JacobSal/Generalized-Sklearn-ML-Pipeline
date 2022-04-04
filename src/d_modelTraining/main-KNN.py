@@ -26,6 +26,8 @@ from sklearn.preprocessing import RobustScaler
 from sklearn.metrics import accuracy_score
 from sklearn.neighbors import KNeighborsClassifier
 
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+
 from localPkg.preproc import ProcessPipe
 from localPkg.datmgmt import DataManager
 
@@ -54,6 +56,25 @@ def robust_save(fname):
     plt.savefig(join(saveBin,'overlayed_predictions.png',dpi=200,bbox_inches='tight'))
 #enddef
 
+def objective(space):
+    clf=KNeighborsClassifier(
+                    # n_estimators =space['n_estimators'], max_depth = int(space['max_depth']), gamma = space['gamma'],
+                    # reg_alpha = int(space['reg_alpha']),min_child_weight=int(space['min_child_weight']),
+                    # colsample_bytree=int(space['colsample_bytree']))
+    
+    evaluation = [( X_train, y_train), ( X_test, y_test)]
+    
+    clf.fit(X_train, y_train,
+            eval_set=evaluation, eval_metric="auc",
+            early_stopping_rounds=10,verbose=False)
+    
+
+    pred = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, pred>0.5)
+    print ("SCORE:", accuracy)
+    return {'loss': -accuracy, 'status': STATUS_OK }
+#enddef
+
 #%% PARAMS
 param_grid = {'kneighborsclassifier__n_neighbors':[5,7,10,13,15,18,20]}
 dTime = '19032022' #date.today().strftime('%d%m%Y')
@@ -79,6 +100,21 @@ pipe_knn = make_pipeline(RobustScaler(),KNeighborsClassifier())
 #we create an instance of SVM and fit out data.
 print("starting modeling career...")
 
+
+#%% GRID SEARCH
+# print("Gridsearch with cross-validation initializing...")
+
+# #Parameter Grid with ranges
+# param_grid = {'max_depth': [0,9999],
+#               'min_samples_split': ,
+#               'max_leaf_nodes': , 
+#               'min_samples_leaf': ,
+#               'n_estimators': ,
+#                'max_samples': ,
+#                'max_features': }
+
+# #pipe_knn.set_params(kneighborsclassifier__n_neighbors = 7)
+
 #%% GRIDSEARCH (IF NECESSARY)
 # gs = GridSearchCV(estimator = pipe_knn,
 #                   param_grid = param_grid,
@@ -95,12 +131,6 @@ print("starting modeling career...")
 # pipe_knn = gs.best_estimator_
 ### END Gridsearch ####
 
-#%% SETTING PARAMETERS
-#{'kneighborsclassifier__n_neighbors': 7}
-print('fitting...')
-
-pipe_knn.set_params(kneighborsclassifier__n_neighbors = 7)
-
 #%% MODEL FITTING
 model = pipe_knn.fit(X_train,y_train)
 #y_score = model.decision_function(X_test)
@@ -114,13 +144,13 @@ y_train_predict = model.predict(X_train)
 print('KNN Train accuracy',accuracy_score(y_train, y_train_predict))
 print('KNN Test accuracy',accuracy_score(y_test,y_predict))
 #%% CROSS VALIDATE
-scores = cross_val_score(estimator = pipe_knn,
-                          X = X,
-                          y = y,
-                          cv = 10,
-                          scoring = 'roc_auc',
-                          verbose = True,
-                          n_jobs=-1)
+# scores = cross_val_score(estimator = pipe_knn,
+#                           X = X,
+#                           y = y,
+#                           cv = 10,
+#                           scoring = 'roc_auc',
+#                           verbose = True,
+#                           n_jobs=-1)
 
-print('CV accuracy scores: %s' % scores)
-print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
+# print('CV accuracy scores: %s' % scores)
+# print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 

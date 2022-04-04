@@ -23,6 +23,8 @@ from sklearn.pipeline import make_pipeline
 from sklearn.metrics import accuracy_score
 from sklearn.preprocessing import RobustScaler
 
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+
 from localPkg.datmgmt import DataManager
 import dill as pickle
 
@@ -46,6 +48,27 @@ try:
 except FileExistsError:
   print('Save folder for model already exists!')
 #endtry
+
+#%% DEFINITIONS & PARAMS
+def objective(space):
+    clf= someClassifier(
+                    # n_estimators =space['n_estimators'], max_depth = int(space['max_depth']), gamma = space['gamma'],
+                    # reg_alpha = int(space['reg_alpha']),min_child_weight=int(space['min_child_weight']),
+                    # colsample_bytree=int(space['colsample_bytree']))
+    
+    evaluation = [( X_train, y_train), ( X_test, y_test)]
+    
+    clf.fit(X_train, y_train,
+            eval_set=evaluation, eval_metric="auc",
+            early_stopping_rounds=10,verbose=False)
+    
+
+    pred = clf.predict(X_test)
+    accuracy = accuracy_score(y_test, pred>0.5)
+    print ("SCORE:", accuracy)
+    return {'loss': -accuracy, 'status': STATUS_OK }
+#enddef
+
 #%% Script Params
 # PARMS
 dTime = '19032022' #date.today().strftime('%d%m%Y')
@@ -126,6 +149,20 @@ pipe_svc = gs.best_estimator_
 """
 ### END Gridsearch ####
 
+#%% GRID SEARCH
+print("Gridsearch with cross-validation initializing...")
+
+#Parameter Grid with ranges
+param_grid = {'max_depth': [0,9999],
+              'min_samples_split': ,
+              'max_leaf_nodes': , 
+              'min_samples_leaf': ,
+              'n_estimators': ,
+               'max_samples': ,
+               'max_features': }
+
+#pipe_knn.set_params(kneighborsclassifier__n_neighbors = 7)
+
 #%% PARAMETER SETTING (IF AVAILABLE)
 ### Setting Parameters ###
 print('fitting...')
@@ -158,13 +195,13 @@ y_train_predict = model.predict(X_train)
 print('SVM Train accuracy',accuracy_score(y_train, y_train_predict))
 print('SVM Test accuracy',accuracy_score(y_test,y_predict))
 #%% CROSS VALIDATION
-scores = cross_val_score(estimator = model,
-                          X = X,
-                          y = y,
-                          cv = 10,
-                          scoring = 'roc_auc',
-                          verbose = 5,
-                          n_jobs=-1)
+# scores = cross_val_score(estimator = model,
+#                           X = X,
+#                           y = y,
+#                           cv = 10,
+#                           scoring = 'roc_auc',
+#                           verbose = 5,
+#                           n_jobs=-1)
 
-print('CV accuracy scores: %s' % scores)
-print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
+# print('CV accuracy scores: %s' % scores)
+# print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
