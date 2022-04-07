@@ -41,7 +41,7 @@ files = []
 
 for r,d,f in os.walk(savePath):
     for name in f:
-        if name == '_folderLog.txt' or name == 'train-data-ALL':
+        if name == '_folderLog.txt' or name == 'train-datav-ALL':
             continue
         #endif
         print(f"adding: {join(r,name)}")
@@ -53,8 +53,11 @@ for r,d,f in os.walk(savePath):
 saveName = join(aggDatDir,"train-data-ALL.pkl")
 X = []
 y = []
+doms = []
 for i in range(0,len(files)):
     X.append(files[i][0])
     y.append(files[i][1])
+    doms.append(files[i][2])
 #endfor
-DataManager.save_obj(saveName,(X,y))
+DataManager.save_obj(saveName,(X,y,doms))
+

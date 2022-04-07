@@ -5,7 +5,7 @@ import numpy as np
 # initialize the list of reference points and boolean indicating
 # whether cropping is being performed or not
 import csv
-
+from ..datmgmt import DataManager
 refPt = []
 
 cropping = False
@@ -153,6 +153,9 @@ class PanZoomWindow(object):
         self.points = [[]]
         self.points_display = [[]]
         self.poly_counter = -1
+        self.od = ['',(),'']
+        self.OOD = False
+        self.OldData = np.array([]);
         self.init_wind()
     'end def'
     def init_wind(self):
@@ -276,7 +279,7 @@ class PanZoomWindow(object):
                     cv2.fillPoly(temp_wind[int(pzs_ul[0]):int(pzs_ul[0]+pzs_shape[0]), int(pzs_ul[1]):int(pzs_ul[1]+pzs_shape[1])], [pointstate],[1,0,0])
         return temp_wind
     
-    def menuChange(self,k,save_file,tmpSaveF,permSaveF):
+    def menuChange(self,k,tmpSaveF,permSaveF):
         if k == ord('m'):
             print("""
                   2 tools: polyline or polyfill
@@ -302,7 +305,7 @@ class PanZoomWindow(object):
                 return 0
             if menSel == ord('s'):
                 print('Saving...')
-                self.export_point_data(save_file,permSaveF)
+                self.export_point_data(permSaveF)
                 # self.write2csv(save_file)
                 savename = input("Save as: [Input Name] ")
                 rootPath = os.path.join(tmpSaveF,savename+'.pkl')
@@ -347,17 +350,50 @@ class PanZoomWindow(object):
         return buf
     'end def'
 
+    def saveOldData(self):
+        pass
+    #enddef
+    def importOldData(self,buf):
+        bVal = 200
+        bitIm = np.zeros(self.img.shape).astype(np.uint8)
+        def import_point_dataBit(fName,imshape,permSaveF):            
+            bitimage = np.fromfile(os.path.join(permSaveF,fName+'.bin'),dtype='int16')
+            bitimage = bitimage.reshape(imshape)
+            self.OldData = bitimage
+            bitIm[:,:,0] = bitimage.astype(np.uint8)
+            return bitIm
+        #enddef
+        if self.OOD:
+            print('overlaying data...')
+            bitIm = import_point_dataBit(self.od[0],self.od[1],self.od[2])
+            outIm = cv2.add(buf,bVal*bitIm)
+            return (1, outIm)
+        else:
+            return (0, [])
+        #endif
+    #enddef
+    def overlayOldData(self,fName,imshape,permSaveF):
+        self.od[0] = fName
+        self.od[1] = imshape
+        self.od[2] = permSaveF
+        self.OOD = True
+    #enddef
+
     def onVTrackbarMove(self,tickPosition):
         self.panAndZoomState.setYFractionOffset(float(tickPosition)/self.TRACKBAR_TICKS)
+    #enddef
     def onHTrackbarMove(self,tickPosition):
         self.panAndZoomState.setXFractionOffset(float(tickPosition)/self.TRACKBAR_TICKS)
+    #enddef
     def onBTrackbarMove(self,tickPosition):
         self.brightness = int(((tickPosition - 0) * (255 - (-255)) / (510 - 0) + (-255)))
-        # print(self.brightness)
+        print(self.brightness)
         self.panAndZoomState.setBcontrol(self.brightness)
+    #enddef
     def onCTrackbarMove(self,tickPosition):
         self.contrast = int(((tickPosition - 0) * (127 - (-127)) / (254 - 0) + (-127)))
         self.panAndZoomState.setCcontrol(self.contrast)
+    #enddef
     def redrawImage(self,start=True):
         pzs = self.panAndZoomState
         if not(start):
@@ -367,13 +403,18 @@ class PanZoomWindow(object):
                 temp_wind = self.img_orig.copy()
             buf = self.apply_brightness_contrast(temp_wind,pzs.AlphaB,pzs.AlphaC,pzs.GammaB,pzs.GammaC)
             self.img = buf
+            (res,bufO) = self.importOldData(buf)
+            if res:
+                self.img = bufO
+            #endif
+        #endif
         cv2.imshow(self.WINDOW_NAME, self.img[int(pzs.ul[0]):int(pzs.ul[0]+pzs.shape[0]), int(pzs.ul[1]):int(pzs.ul[1]+pzs.shape[1])])
-        
+    #enddef
     def export_point_data(self,permSaveF):
         os.chdir(permSaveF)
         array = self.img[:,:,0] == 255
         array.astype('int16').tofile(self.IMG_NAME+".bin")
-    'end def'
+    #enddef
 
     def write2csv(self,tmpSaveF):
         savef = os.path.join(tmpSaveF,self.IMG_NAME+"_datainf.csv")
@@ -384,11 +425,26 @@ class PanZoomWindow(object):
             'end for'
         'end with'
         return 0
-    'end def'
+    #enddef
 
     def predict_rest(self,save=True):
         pass
-    'end def'
+    #enddef
+
+    def main(self,tmpSaveF,permSaveF):
+        k = -1
+        print("press 'm' for Menu")
+        # keep looping until the 'q' key is pressed
+        while k != ord('q') and k != 27 and cv2.getWindowProperty(self.WINDOW_NAME,0) >= 0:
+            k = cv2.waitKey(0)
+            self.menuChange(k,tmpSaveF,permSaveF)
+        'end while'
+        # close all open windows
+        cv2.destroyAllWindows()
+        self.export_point_data(permSaveF)
+        self.write2csv(tmpSaveF)
+        return self
+    #enddef
 'end class'
 
 def import_train_data(im_name,imshape,fileDir):
@@ -438,19 +494,4 @@ def read2csv(file_name, save_folder):
     'end with'
     fout = np.array(fout)
     return fout
-'end def'
-
-def main(window,tmpSaveF,permSaveF):
-    k = -1
-    print("press 'm' for Menu")
-    # keep looping until the 'q' key is pressed
-    while k != ord('q') and k != 27 and cv2.getWindowProperty(window.WINDOW_NAME,0) >= 0:
-        k = cv2.waitKey(0) 
-        window.menuChange(k,tmpSaveF)
-    'end while'
-    # close all open windows
-    cv2.destroyAllWindows()
-    window.export_point_data(permSaveF)
-    window.write2csv(tmpSaveF)
-    return window
 'end def'

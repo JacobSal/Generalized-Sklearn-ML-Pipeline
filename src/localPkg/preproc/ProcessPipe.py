@@ -6,6 +6,7 @@ Created on Tues Jan 25 19:06:00 2022
 @version: 1.0
 """
 print(__doc__)
+from itertools import count
 from socket import IP_MULTICAST_LOOP
 import time
 import os
@@ -30,7 +31,7 @@ from ..disp import LabelMaker
 from ..preproc import Filters
 
 
-
+callNum = 0
 def dispTS(startFunc = True, dispTitle = ""):
     """
     Summary : displays time stamp for when the function is first called to when its next called.
@@ -46,19 +47,18 @@ def dispTS(startFunc = True, dispTitle = ""):
     print(fString)
 
     """
-    global tStart, tEnd
+    global tStart, tEnd, callNum
     if startFunc:
         tStart = time.time()
         outStr = f"{dispTitle}"
     else:
         tEnd = time.time()
-        if dispTitle == "":
-            dispTitle = "DONE!"
-        else:
-            dispTitle = f"{dispTitle} done."
+        if dispTitle != "":
+            dispTitle = f"{dispTitle}"
         #endif
         tDif = tEnd - tStart
-        outStr = f"{dispTitle} : runtime {tDif}"
+        callNum += 1
+        outStr = f"{callNum}) {dispTitle}: runtime {tDif}"
     #endif
     return print(outStr)
 #enddef
@@ -257,7 +257,7 @@ def filter_pipeline(image,fftWidth,wienerWindowSize,medianWindowSize,multiA=1,mu
         DESCRIPTION.
 
     """
-    dispTS("")
+    dispTS()
     directionFeats = np.array([])
 
     #Normalize image
@@ -333,7 +333,7 @@ def im_watershed(imageIn,train = True, boolim = np.array([]),multiA=3,multiD=2):
     # normalize image than convolve a gaussian kernel to expand feature discovery.
     gausIm = convolve(imageIn,Filters._d3gaussian(16,multiA,multiD))
     # perform a rough thresholding
-    segments = gausIm > (np.mean(gausIm) - np.std(gausIm))
+    segments = gausIm > np.median(gausIm) #(np.mean(gausIm)-np.std(gausIm)/(np.pi)) #adding np.std(gausIm)/2 gives some more specificity. 
     # perform distance calculations to determine segment proximities.
     D = distance_transform_edt(segments)
     # get local maxima
@@ -377,6 +377,7 @@ def _getSmallSquares(seg, nSet):
     # padx = 0
     leftOver = []
     subSegs = []
+    orig = []
     yval = abs(seg[0].stop-seg[0].start)
     xval = abs(seg[1].stop-seg[1].start)
     tmpy = [slice(0,yval,None)]
@@ -425,13 +426,17 @@ def _getSmallSquares(seg, nSet):
         #endif
         for ydim in tmpy:
             for xdim in tmpx:
-                subSegs.append((ydim,xdim))
+                tmpO1 = slice(ydim.start + seg[0].start,ydim.stop + seg[0].start,None)
+                tmpO2 = slice(xdim.start + seg[1].start,xdim.stop + seg[1].start,None)
+                tmpOrig = (tmpO1,tmpO2)
+                orig.append(tmpOrig)
+                tmp = (ydim,xdim)
+                subSegs.append(tmp)
             #endfor
         #endfor
-        leftOver = [(tmpyy,tmpxx)]
     #endif
     # dispTS(False,"_getSmallSquares")
-    return subSegs, leftOver
+    return subSegs, orig
 
 def pad_segs(imList,boolList,f,train = True,fill_val = 0):
     """
@@ -464,8 +469,9 @@ def pad_segs(imList,boolList,f,train = True,fill_val = 0):
     newDoms = []
 
     for seg in f:
-        subSegs, _ = _getSmallSquares(seg,NSET)
+        subSegs, origSegs = _getSmallSquares(seg,NSET)
         if len(subSegs) > 0:
+            i = 0
             for ss in subSegs:
                 yval = abs(ss[0].stop-ss[0].start)
                 xval = abs(ss[1].stop-ss[1].start)
@@ -477,11 +483,13 @@ def pad_segs(imList,boolList,f,train = True,fill_val = 0):
                     if train:
                         newBoolList.append(np.pad(boolList[count][ss],((0,NSET-yval),(0,NSET-xval)),'constant',constant_values=fill_val))
                     #endif
-                    newDoms.append((ss[0],ss[1]))
+                    newDoms.append(origSegs[i])
                 else:
                     newImList.append(imList[count][ss])
                     newBoolList.append(boolList[count][ss])
-                    newDoms.append((ss[0],ss[1]))
+                    newDoms.append(origSegs[i])
+                #endif
+                i += 1
             #endfor
         #endif
         count += 1
@@ -534,7 +542,7 @@ def downSampleStd(imList, boolList, train=True):
     dispTS(False,"downSampleStd")
     return imList, boolList
 
-def rotateNappend(imList, boolList, train = True):
+def rotateNappend(imList, boolList, domains, train = True):
     """
     Summary :
 
@@ -548,6 +556,7 @@ def rotateNappend(imList, boolList, train = True):
     dispTS()
     imsOut = []
     boolOut = []
+    domsOut = []
     for i in range(len(imList)):
         r1 = rotate(imList[i], ROTATE_180)
         r2 = rotate(imList[i], ROTATE_90_CLOCKWISE)
@@ -556,16 +565,17 @@ def rotateNappend(imList, boolList, train = True):
         allR = [r1,r2,r3,r4]
         if train:
             tmpB = boolList[i]
-            for i in range(0,len(allR)):
+            for j in range(0,len(allR)):
                 boolOut.append(tmpB)
             #endfor
         #endif
-        for i in range(0,len(allR)):
-            imsOut.append(allR[i])
+        for j in range(0,len(allR)):
+            imsOut.append(allR[j])
+            domsOut.append(domains[i])
         #endfor
     #endfor
     dispTS(False,"rotateNappend")
-    return imsOut, boolOut
+    return imsOut, boolOut, domsOut
 #enddef
 
 def feature_extract(imageIn, fftWidth, wieneerWindowSize, medWindowSize, **kwargs):
@@ -611,13 +621,13 @@ def feature_extract(imageIn, fftWidth, wieneerWindowSize, medWindowSize, **kwarg
     medIm, _ = filter_pipeline(imageIn,fftWidth,wieneerWindowSize,medWindowSize)
 
     #segment image using watershed and pad images for resizing
-    imList, boolList, f = im_watershed(medIm,train,boolIm)
+    imList, boolList, origDoms = im_watershed(medIm,train,boolIm)
 
     #pad segments
-    padedImSeg, padedBoolSeg, newDoms = pad_segs(imList,boolList,f,train,0)
+    padedImSeg, padedBoolSeg, newDoms = pad_segs(imList,boolList,origDoms,train,0)
 
     #roate segments and append
-    rotatedIms, rotatedBools = rotateNappend(padedImSeg, padedBoolSeg)
+    rotatedIms, rotatedBools, rotateDoms = rotateNappend(padedImSeg, padedBoolSeg, newDoms)
 
     #generate hog features
     dispTS('appending hogs...')
@@ -633,7 +643,7 @@ def feature_extract(imageIn, fftWidth, wieneerWindowSize, medWindowSize, **kwarg
         #endif
         hogFeats.append(hogi[1]) #grab the array from hog() output
     #endfor
-    dispTS('hogs appended.')
+    dispTS(False, 'hogs appended.')
 
     #downsample feature sets (optional)
     # tmpInIm = padedImSeg.copy()
@@ -690,6 +700,7 @@ def create_data(datX,imNum,**kwargs):
     yTrain (IF 'train' == True) : TYPE, list of int
         DESCRIPTION
     """
+    dispTS()
     train = True
     datY = []
     domains = []
@@ -701,11 +712,11 @@ def create_data(datX,imNum,**kwargs):
             datY = value
         #endif
         if key == "domains":
-            domain = value
+            domains = value
         #endif
     #endfor
         
-    dispTS()
+    
     yTrain = []
     tmpX = []
     for i in range(0,len(datX)):
@@ -727,7 +738,7 @@ def create_data(datX,imNum,**kwargs):
         imArr = np.tile(imNum,yTrain.shape)
         yTrain = np.hstack((yTrain,imArr))
         if domains:
-            yTrain = np.hstack((yTrain,domains))
+            return [outX, yTrain, domains]
         #endif
         return [outX, yTrain]
     #endif
@@ -805,6 +816,7 @@ def overlay_predictions(imageIn, boolIm, predIn, yTest, idxTest, f, saveBin, tra
     return 0
 #enddef
 
+cnt = 0
 def overlayValidate(imageIn,predictions,domains,saveDir,**kwargs):
     """
     Parameters
@@ -824,29 +836,44 @@ def overlayValidate(imageIn,predictions,domains,saveDir,**kwargs):
         DESCRIPTION.
 
     """
-
+    for key,val in kwargs.items():
+        if key == 'boolIm':
+            boolIm = val
+        #endif
+    #endfor
+    global cnt
     nH= imageIn.shape[0]
     nW= imageIn.shape[1]
     predIm = np.zeros((nH,nW)).astype(np.float32)
+    falseIm = np.zeros((nH,nW)).astype(np.float32)
     # true_im = np.zeros((nH,nW)).astype(np.float32)
     plt.figure("Overlayed Predictions for Test Domain",figsize = (nH/100,nW/100))  
-    plt.imshow(imageIn, **kwargs)
+    plt.imshow(imageIn[:,:,2]*5)
+    # plt.imshow(imageIn[:,:,1]v, alpha = 0.5)
     legend_ele = [Rectangle((0, 0), 1, 1, fc="w", fill=False, edgecolor='none', linewidth=0,label = "label: (actual,predict)"),
-                  Patch(facecolor = "red",label = "segmented"),
-                  Patch(facecolor = "orange",label = "training data")]
+                  Patch(facecolor = "red",label = "True"),
+                  Patch(facecolor = "orange",label = "False")]
     # plt.set_size_inches(nH/100,nW/100)
     for i in range(0,len(domains)):
         y1 = domains[i][0].start
         y2 = domains[i][0].stop
         x1 = domains[i][1].start
         x2 = domains[i][1].stop
-        predIm[y1:y2,x1:x2] = np.ones((y2-y1,x2-x1))
-        s = "({0},{1})".format('?',predictions[i])
-        plt.text(x1, y1-5, s, fontsize = 10, bbox=dict(fill=False, edgecolor='none', linewidth=2))
+        if predictions[i]:
+            predIm[y1:y2,x1:x2] = np.ones((y2-y1,x2-x1))
+        else:
+            falseIm[y1:y2,x1:x2] = np.ones((y2-y1,x2-x1))
+        #endif
+        # s = "({0})".format(predictions[i])
+        # plt.text(x1, y1-5, s, fontsize = 10, bbox=dict(fill=False, edgecolor='none', linewidth=2))
     #endfor
     plt.legend(handles = legend_ele, loc = 'lower right')
+    plt.imshow(gen_mask(boolIm), alpha=1, cmap=ListedColormap(['yellow']))
     plt.imshow(gen_mask(predIm), alpha=0.3, cmap=ListedColormap(['red']))
-    plt.savefig(os.path.join(saveDir,'overlayed_predictions.tif'),dpi=200,bbox_inches='tight')
+    plt.imshow(gen_mask(falseIm), alpha=0.4, cmap=ListedColormap(['orange']))
+    # plt.show()
+    plt.savefig(os.path.join(saveDir,f'overlayed_predictions_{cnt}.tif'),dpi=300,bbox_inches='tight')
+    cnt += 1
     return 0
 #enddef
 
@@ -968,28 +995,17 @@ def random_ind(N, begVal = 0,endVal = 64):
       rndInts.append(random.randint(begVal,endVal))
     return rndInts
 
-def mainLoop(fileNum):
+def mainLoop(fileNum,rawDatDir,trainDatDir,savePath):
     from datetime import date
-    from os.path import dirname, join, abspath, exists
+    from os.path import join, exists
     #%% Globals
-    global dTime, cfpath, folderName, trainDatDir, aggDatDir, savePath
+    global dTime
     dTime = date.today().strftime('%d%m%Y')
-    
-    #%% PATHS 
-    # Path to file
-    cfpath = dirname(__file__) 
-    aDatGenDir = abspath(join(cfpath,"..","..","a_dataGeneration"))
-    bDatAggDir = abspath(join(cfpath,"..","..","b_dataAggregation"))
-    # Path to images to be processed
-    rawDatDir = join(aDatGenDir,"rawData")
-    # Path to training files
-    trainDatDir = join(bDatAggDir,"processedData","EL-11122021")
-    # Path to aggregate data files
-    aggDatDir = join(bDatAggDir,"aggregateData")
-    savePath = join(aggDatDir,dTime)
 
-    if not exists(savePath):
-        os.mkdir(savePath)
+    try: os.mkdir(savePath)
+    except FileExistsError:
+        print(f'Path Exists: {savePath}')
+    #endtry
     #endif
 
     #%% Initialize Image Parsing/Pre-Processing 
@@ -1008,7 +1024,7 @@ def mainLoop(fileNum):
     #opend filfe
     imageOut,nW,nH,_,imName,imNum = imDir.openFileI(fileNum,'train')
     #load image and its information
-    print('   '+'{}.) Procesing Image : {}'.format(imNum,imName))
+    print('   '+'{}.) Processing Image : {}'.format(imNum,imName))
     #only want the red channel (fyi: cv2 is BGR (0,1,2 respectively) while most image processing considers 
     #the notation RGB (0,1,2 respectively))=
     imageIn = imageOut[:,:,channel]
@@ -1016,10 +1032,10 @@ def mainLoop(fileNum):
     trainBool = LabelMaker.import_train_data(imName,(nH,nW),trainDatDir)
     #extract features from image using method(SVM.filter_pipeline) then watershed data useing thresholding algorithm (work to be done here...) to segment image.
     #Additionally, extract filtered image data and hog_Features from segmented image. (will also segment train image if training model) 
-    padedImSeg, padedBoolSeg, hogFeats, doms, dsFeatSets = feature_extract(imageIn, fftWidth, wienerWindowSize, medWindowSize, train = True, boolIm = trainBool)
+    _ , padedBoolSeg, hogFeats, doms, _ = feature_extract(imageIn, fftWidth, wienerWindowSize, medWindowSize, train = True, boolIm = trainBool)
     chosenFeats = hogFeats
     #choose which data you want to merge together to train SVM. Been using my own filter, but could also use hog_features.
-    result = create_data(chosenFeats,fileNum,datY = padedBoolSeg,Train = True)
+    result = create_data(chosenFeats,fileNum,datY = padedBoolSeg,Train = True,domains=doms)
     
     #%% WRAP-UP MAIN
     dispTS(False)
@@ -1030,29 +1046,16 @@ def mainLoop(fileNum):
     #endfor
 #enddef
 
-def mainLoopTest(fileNum):
+def mainLoopTest(fileNum,aDatGenDir,bDatAggDir,rawDatDir,trainDatDir,aggDatDir,savePath):
     from datetime import date
-    from os.path import dirname, join, abspath, exists
-
+    from os.path import exists
     #%% Globals
-    global dTime, cfpath, folderName, trainDatDir, aggDatDir, savePath
+    global dTime
     dTime = date.today().strftime('%d%m%Y')
     xOut = []
-    
-    #%% PATHS 
-    # Path to file
-    cfpath = dirname(__file__) 
-    aDatGenDir = abspath(join(cfpath,"..","..","a_dataGeneration"))
-    bDatAggDir = abspath(join(cfpath,"..","..","b_dataAggregation"))
-    # Path to images to be processed
-    rawDatDir = join(aDatGenDir,"rawData")
-    # Path to training files
-    trainDatDir = join(bDatAggDir,"processedData","EL-11122021")
-    # Path to aggregate data files
-    aggDatDir = join(bDatAggDir,"aggregateData")
-    savePath = join(aggDatDir,dTime)
 
     if not exists(savePath):
+        print(f'{savePath} does not exist.\n Creating new folder...')
         os.mkdir(savePath)
     #endif
 
@@ -1066,6 +1069,7 @@ def mainLoopTest(fileNum):
     wienerWindowSize = (5,5)
     medWindowSize = 10
 
+    #%% Main Process
     dispTS()
     #opend file
     imageOut, _, _, _, imName, imNum = imDir.openFileI(fileNum,'test')
@@ -1082,7 +1086,7 @@ def mainLoopTest(fileNum):
     tmpX = create_data(chosenFeats,fileNum,train = False, domains = doms)
     xOut.append(tmpX)
 
-    dispTS(False)
+    dispTS(False, "mainLoop")
     print('     '+'Number of Segments : %i'%(len(chosenFeats)))
     #stack X
     xOut = np.vstack(xOut)
