@@ -11,6 +11,13 @@ Created on Wed Jan 13 19:02:19 2021
 
 @author: jsalm
 """
+
+import multiprocessing as mp
+import os
+import sys
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(SCRIPT_DIR))
+
 from os import mkdir
 from os.path import join, abspath, dirname
 
@@ -42,12 +49,12 @@ saveBin = join(cfpath,"saveBin")
 # Path to training files
 trainDatDir = abspath(join(cfpath,"..","b_dataAggregation","processedData","EL-11122021"))
 # Path to model
-modelDir = abspath(join(saveBin,"saveKNN"))
+modelDir = abspath(join(saveBin,"saveRF"))
 # Path to cross-validated files
 cvDatDir = abspath(join(cfpath,"..","c_dataValidation","saveBin"))
 # Make directory for saves
 try:
-  mkdir(abspath(join(modelDir)))
+    mkdir(abspath(join(modelDir)))
 except FileExistsError:
   print('Save folder for model already exists!')
 #endtry
@@ -108,7 +115,7 @@ print("y_test: " + str(np.unique(y_test)))
 
 #%% Create KNN pipeline
 print('KNN:')
-# pipe_knn = make_pipeline(RobustScaler(),KNeighborsClassifier())
+clf = make_pipeline(RobustScaler(),KNeighborsClassifier())
 
 #%% KNN MODEL FITTING
 #we create an instance of KNN and fit out data.
@@ -122,29 +129,29 @@ paraGrid = {'n_neighbors': np.arange(1,5,2),
             'weights': ['uniform', 'distance']}
             # 'metric': ['euclidean', 'manhattan']}
 
-knn_gridsearch = GridSearchCV(estimator = KNeighborsClassifier(),
-                  param_grid = paraGrid,
-                  scoring = 'roc_auc',
-                  cv = 2,
-                  n_jobs = -1,
-                  verbose = 10)
+# knn_gridsearch = GridSearchCV(estimator = pipe_knn,
+#                   param_grid = paraGrid,
+#                   scoring = 'roc_auc',
+#                   cv = 2,
+#                   n_jobs = 7,
+#                   verbose = 20)
 
 
-knn_gridsearch.fit(X_train,y_train)
-best_score = knn_gridsearch.best_score_
-best_params = knn_gridsearch.best_params_
-print('Best Params: ', best_params)
-print('Best Score: ', best_score)
-print('CV Results: ', knn_gridsearch.cv_results_)
+# knn_gridsearch.fit(X_train,y_train)
+# best_score = knn_gridsearch.best_score_
+# best_params = knn_gridsearch.best_params_
+# print('Best Params: ', best_params)
+# print('Best Score: ', best_score)
+# print('CV Results: ', knn_gridsearch.cv_results_)
 
-#Plotting parameter performance
-print('Plotting Gridsearch Results...')
-grid_scores = knn_gridsearch.cv_results_
+# #Plotting parameter performance
+# print('Plotting Gridsearch Results...')
+# grid_scores = knn_gridsearch.cv_results_
 
 
 #%% MODEL FITTING
 print('fitting...')
-clf = KNeighborsClassifier(**best_params)
+# clf = KNeighborsClassifier(**best_params)
 clf.fit(X_train,y_train)
 #y_score = model.decision_function(X_test)
 print(clf.score(X_test,y_test))
@@ -182,4 +189,4 @@ plot_roc_curve(roc_auc_train, roc_auc_test)
 #                           n_jobs=-1)
 
 # print('CV accuracy scores: %s' % scores)
-# print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
+# print('CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores)))

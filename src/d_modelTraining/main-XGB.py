@@ -12,13 +12,17 @@ from os import mkdir
 import dill as pickle
 
 from sklearn.svm import SVC
-from sklearn.model_selection import cross_val_score
-from sklearn.metrics import   accuracy_score
+from sklearn.model_selection import cross_val_score, GridSearchCV
+from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc
 from sklearn.ensemble import  RandomForestClassifier
+from sklearn_evaluation import plot
 
 from xgboost import XGBClassifier
 
-import src.localModules.DataManager as DataManager
+from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
+
+from localPkg.datmgmt import DataManager
+
 
 #%% PATHS 
 # Path to file
@@ -44,10 +48,43 @@ def robust_save(fname):
     plt.savefig(join(saveBin,'overlayed_predictions.png',dpi=200,bbox_inches='tight'))
 #enddef
 
-#%% PARAMS
-dTime = '03022022' #date.today().strftime('%d%m%Y')
+# def objective(space):
+#     clf=XGBClassifier(
+#                     n_estimators =space['n_estimators'], max_depth = int(space['max_depth']), gamma = space['gamma'],
+#                     reg_alpha = int(space['reg_alpha']),min_child_weight=int(space['min_child_weight']),
+#                     colsample_bytree=int(space['colsample_bytree']))
+    
+#     evaluation = [( X_train, y_train), ( X_test, y_test)]
+    
+#     clf.fit(X_train, y_train,
+#             eval_set=evaluation, eval_metric="auc",
+#             early_stopping_rounds=10,verbose=False)
+    
 
-#%% Load k-split Data (k=10)
+#     pred = clf.predict(X_test)
+#     accuracy = accuracy_score(y_test, pred>0.5)
+#     print ("SCORE:", accuracy)
+#     return {'loss': -accuracy, 'status': STATUS_OK }
+# #enddef
+
+def plot_roc_curve(roc_auc_train, roc_auc_test):
+    plt.figure(0)
+    plt.title('Receiver Operating Characteristic')
+    plt.plot(fpr_tr, tpr_tr, 'g', label = 'Training AUC = %0.2f' % roc_auc_train)
+    plt.plot(fpr_ts, tpr_ts, 'b', label = 'Testing AUC = %0.2f' % roc_auc_test)
+    plt.legend(loc = 'lower right')
+    plt.plot([0, 1], [0, 1],'r--')
+    plt.xlim([0, 1])
+    plt.ylim([0, 1])
+    plt.ylabel('True Positive Rate')
+    plt.xlabel('False Positive Rate')
+    plt.show()
+
+
+#%% PARAMS
+dTime = '19032022' #date.today().strftime('%d%m%Y')
+
+#%%
 tmpSaveDir = join(cvDatDir, ('CVjoined_data_'+dTime+'.pkl'))
 tmpSave = DataManager.load_obj(tmpSaveDir)
 X_train = tmpSave[0]
@@ -66,38 +103,128 @@ print('XGBoost:')
 
 ##XGBoost with Optimal HyperParameters
 print("starting modeling career...")
-coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
-XGBmodel = XGBClassifier(max_depth = coef[0],subsample = coef[1],n_estimators = coef[2],
-                      colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate=coef[5], 
-                      min_child_weight = coef[6], random_state = coef[7],reg_alpha = coef[8],
-                      reg_lambda = coef[9])
+# coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
+# XGBmodel = XGBClassifier(max_depth = coef[0],subsample = coef[1],n_estimators = coef[2],
+#                       colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate = coef[5], 
+#                       min_child_weight = coef[6], random_state = coef[7],reg_alpha = coef[8],
+#                       reg_lambda = coef[9])
+
+#%% GRID SEARCH
+print("Gridsearch with cross-validation initializing...")
+
+#Parameter Grid with ranges
+paraGrid = {'max_depth': np.arange(1,2,1), #(0,9999), typical: 3-10  #15
+            'learning_rate': np.arange(0.1,0.2,0.05)}#(0,1), typical: 0.01-0.2 #0.5
+            # 'n_estimators': np.arange(100,300,100), #[0,9999], 
+            # 'gamma': np.arange(0.01,0.05,0.01)}
+            # 'subsample': np.arange(0.1,1.5,0.1)}
+              # 'colsample_bylevel': [0.5,1], #[0,1] ,
+              # 'colsample_bytree': [0.5,1], #[0,1],
+              #   'min_child_weight': [1,50], #(0,9999),
+              #   'alpha': [0.5,1], #[0,1],
+              #   'lambda': [0.5,1] }#[0,1]}
+
+#Gridsearch with cross-validation
+xgb_gridsearch = GridSearchCV(estimator = XGBClassifier(), 
+                        param_grid = paraGrid,
+                        scoring = 'roc_auc',
+                        cv = 2, 
+                        verbose = 20, 
+                        n_jobs = 7)
+
+#Calling Method 
+# plot_grid_search(rf_gridsearch.cv_results_, n_estimators, max_features, 'N Estimators', 'Max Features')
+
+xgb_gridsearch.fit(X_train,y_train)
+best_score = xgb_gridsearch.best_score_
+best_params = xgb_gridsearch.best_params_
+print('Best Params: ', best_params)
+print('Best Score: ', best_score)
+print('CV Results: ', xgb_gridsearch.cv_results_)
+
+#Plotting parameter performance
+print('Plotting Gridsearch Results...')
+grid_scores = xgb_gridsearch.cv_results_
+
+# plt.figure(0)
+# plot.grid_search(grid_scores, change=('min_samples_leaf', 'min_samples_split'),
+#                  subset={'n_estimators': [100]})
+
+# plt.figure(1)
+# plot.grid_search(grid_scores, change='n_estimators', kind='bar')
+
+#%% BAYESIAN OPTIMIZATION WITH HYPEROPT
+
+# #Domain space
+# space = {'max_depth': hp.quniform("max_depth",3,18,1), #(0,9999), typical: 3-10
+#               'gamma': hp.uniform ('gamma', 1,9),
+#               'colsample_bytree' : hp.uniform('colsample_bytree', 0.5,1),
+#                'min_child_weight' : hp.quniform('min_child_weight', 0, 10, 1),
+#                'reg_alpha' : hp.quniform('reg_alpha', 40,180,1),
+#                'reg_lambda' : hp.uniform('reg_lambda', 0,1),
+#                'n_estimators': 180,
+#                'seed': 0
+#                }
+
+# #Run optimization algorithm
+# print("Bayesian optimization initializing...")
+# trials = Trials()
+
+# best_hyperparams = fmin(fn = objective,
+#                         space = space,
+#                         algo = tpe.suggest,
+#                         max_evals = 100,
+#                         trials = trials)
+
+# print("The best hyperparameters are : ","\n")
+# print(best_hyperparams)
+
+
 
 
 #%% MODEL FITTING
 print('fitting...')
-model = XGBmodel.fit(X_train,y_train)
-y_score = evals_result = model.evals_result()
-print(model.score(X_test,y_test))
+clf = XGBClassifier(**best_params)
+clf.fit(X_train,y_train)
+#y_score = model.decision_function(X_test)
+print(clf.score(X_test,y_test))
 filename = join(modelDir,('fittedXGB_'+dTime+'.sav'))
-pickle.dump(model, open(filename, 'wb'))
+pickle.dump(clf, open(filename, 'wb'))
 print('done')
 
-y_predict = model.predict(X_test)
-y_train_predict = model.predict(X_train)
+#Result metrics 
+y_train_predict = clf.predict(X_train)
+y_predict = clf.predict(X_test)
 print('XGB Train accuracy',accuracy_score(y_train, y_train_predict))
 print('XGB Test accuracy',accuracy_score(y_test,y_predict))
+print('XGB Train F1 Score', f1_score(y_train, y_train_predict))
+print('XGB Test F1 score', f1_score(y_test, y_predict))
+print('XGB Train ROC_AUC Score', roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]))
+print('XGB Test ROC_AUC score', roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]))
+
+#train data ROC
+fpr_tr, tpr_tr, threshold = roc_curve(y_train, clf.predict_proba(X_train)[:,1])
+roc_auc_train = auc(fpr_tr, tpr_tr)
+
+#test data ROC
+fpr_ts, tpr_ts, threshold = roc_curve(y_test, clf.predict_proba(X_test)[:,1])
+roc_auc_test = auc(fpr_ts, tpr_ts)
+
+#Plot ROC curve
+plot_roc_curve(roc_auc_train, roc_auc_test)
+
 
 #%% CROSS VALIDATE k-fold (k=10)
-scores = cross_val_score(estimator = model,
-                          X = X_train,
-                          y = y_train,
-                          cv = 10,
-                          scoring = 'roc_auc',
-                          verbose = True,
-                          n_jobs=-1)
+# scores = cross_val_score(estimator = model,
+#                           X = X_train,
+#                           y = y_train,
+#                           cv = 10,
+#                           scoring = 'roc_auc',
+#                           verbose = True,
+#                           n_jobs=-1)
 
-print('XGB CV accuracy scores: %s' % scores)
-print('XGB CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
+# print('XGB CV accuracy scores: %s' % scores)
+# print('XGB CV accuracy: %.3f +/- %.3f' % (np.mean(scores), np.std(scores))) 
         
 #Best coefficients so far:
     #coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
