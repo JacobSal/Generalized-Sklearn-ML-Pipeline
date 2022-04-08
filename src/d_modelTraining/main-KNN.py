@@ -40,6 +40,7 @@ from localPkg.preproc import ProcessPipe
 from localPkg.datmgmt import DataManager
 
 #%% PATHS 
+print("Number of processors: ", mp.cpu_count())
 # Path to file
 cfpath = dirname(__file__) 
 # Path to images to be processed
@@ -84,6 +85,7 @@ def robust_save(fname):
 # #enddef
 
 def plot_roc_curve(roc_auc_train, roc_auc_test):
+    print('Generating ROC/AUC Plot...')
     plt.figure(0)
     plt.title('Receiver Operating Characteristic')
     plt.plot(fpr_tr, tpr_tr, 'g', label = 'Training AUC = %0.2f' % roc_auc_train)
@@ -115,7 +117,7 @@ print("y_test: " + str(np.unique(y_test)))
 
 #%% Create KNN pipeline
 print('KNN:')
-clf = make_pipeline(RobustScaler(),KNeighborsClassifier())
+# clf = make_pipeline(RobustScaler(),KNeighborsClassifier())
 
 #%% KNN MODEL FITTING
 #we create an instance of KNN and fit out data.
@@ -129,29 +131,29 @@ paraGrid = {'n_neighbors': np.arange(1,5,2),
             'weights': ['uniform', 'distance']}
             # 'metric': ['euclidean', 'manhattan']}
 
-# knn_gridsearch = GridSearchCV(estimator = pipe_knn,
-#                   param_grid = paraGrid,
-#                   scoring = 'roc_auc',
-#                   cv = 2,
-#                   n_jobs = 7,
-#                   verbose = 20)
+knn_gridsearch = GridSearchCV(estimator = KNeighborsClassifier(),
+                  param_grid = paraGrid,
+                  scoring = 'roc_auc',
+                  cv = 2,
+                  n_jobs = -1,
+                  verbose = 20)
 
 
-# knn_gridsearch.fit(X_train,y_train)
-# best_score = knn_gridsearch.best_score_
-# best_params = knn_gridsearch.best_params_
-# print('Best Params: ', best_params)
-# print('Best Score: ', best_score)
-# print('CV Results: ', knn_gridsearch.cv_results_)
+knn_gridsearch.fit(X_train,y_train)
+best_score = knn_gridsearch.best_score_
+best_params = knn_gridsearch.best_params_
+print('Best Params: ', best_params)
+print('Best Score: ', best_score)
+print('CV Results: ', knn_gridsearch.cv_results_)
 
-# #Plotting parameter performance
-# print('Plotting Gridsearch Results...')
-# grid_scores = knn_gridsearch.cv_results_
+#Plotting parameter performance
+print('Plotting Gridsearch Results...')
+grid_scores = knn_gridsearch.cv_results_
 
 
 #%% MODEL FITTING
 print('fitting...')
-# clf = KNeighborsClassifier(**best_params)
+clf = KNeighborsClassifier(**best_params)
 clf.fit(X_train,y_train)
 #y_score = model.decision_function(X_test)
 print(clf.score(X_test,y_test))
@@ -160,6 +162,7 @@ pickle.dump(clf, open(filename, 'wb'))
 print('done')
 
 #Result metrics 
+print('Generating Scores...')
 y_train_predict = clf.predict(X_train)
 y_predict = clf.predict(X_test)
 print('KNN Train accuracy',accuracy_score(y_train, y_train_predict))

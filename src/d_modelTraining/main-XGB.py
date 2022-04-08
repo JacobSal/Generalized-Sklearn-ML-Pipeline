@@ -6,6 +6,7 @@ Created on Wed Jan 13 19:02:19 2021
 """
 
 import numpy as np
+import multiprocessing as mp
 import matplotlib.pyplot as plt
 from os.path import dirname, abspath, join
 from os import mkdir
@@ -25,6 +26,7 @@ from localPkg.datmgmt import DataManager
 
 
 #%% PATHS 
+print("Number of processors: ", mp.cpu_count())
 # Path to file
 cfpath = dirname(__file__) 
 # Path to images to be processed
@@ -68,6 +70,7 @@ def robust_save(fname):
 # #enddef
 
 def plot_roc_curve(roc_auc_train, roc_auc_test):
+    print('Generating ROC/AUC Plot...')
     plt.figure(0)
     plt.title('Receiver Operating Characteristic')
     plt.plot(fpr_tr, tpr_tr, 'g', label = 'Training AUC = %0.2f' % roc_auc_train)
@@ -130,7 +133,7 @@ xgb_gridsearch = GridSearchCV(estimator = XGBClassifier(),
                         scoring = 'roc_auc',
                         cv = 2, 
                         verbose = 20, 
-                        n_jobs = 7)
+                        n_jobs = -1)
 
 #Calling Method 
 # plot_grid_search(rf_gridsearch.cv_results_, n_estimators, max_features, 'N Estimators', 'Max Features')
@@ -193,6 +196,7 @@ pickle.dump(clf, open(filename, 'wb'))
 print('done')
 
 #Result metrics 
+print('Generating Scores...')
 y_train_predict = clf.predict(X_train)
 y_predict = clf.predict(X_test)
 print('XGB Train accuracy',accuracy_score(y_train, y_train_predict))

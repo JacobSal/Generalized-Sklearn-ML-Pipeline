@@ -74,6 +74,7 @@ except FileExistsError:
 # #enddef
 
 def plot_roc_curve(roc_auc_train, roc_auc_test):
+    print('Generating ROC/AUC Plot...')
     plt.figure(0)
     plt.title('Receiver Operating Characteristic')
     plt.plot(fpr_tr, tpr_tr, 'g', label = 'Training AUC = %0.2f' % roc_auc_train)
@@ -201,6 +202,7 @@ pickle.dump(clf, open(filename, 'wb'))
 print('done')
 
 #Result metrics 
+print('Generating Scores...')
 y_train_predict = clf.predict(X_train)
 y_predict = clf.predict(X_test)
 print('SVM Train accuracy',accuracy_score(y_train, y_train_predict))
