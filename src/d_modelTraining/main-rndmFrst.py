@@ -2,7 +2,7 @@
 """
 Created on Wed Jan 13 19:02:19 2021
 
-@author: jsalm
+@author: jsalm/eduluca
 """
 
 import numpy as np
@@ -17,10 +17,11 @@ import matplotlib.pyplot as plt
 from os.path import dirname, abspath, join
 from os import mkdir
 import dill as pickle
+from ttictoc import tic,toc
 
 from sklearn.svm import SVC
 from sklearn.model_selection import cross_val_score, GridSearchCV
-from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc
+from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc,plot_confusion_matrix,confusion_matrix
 from sklearn.ensemble import RandomForestClassifier
 from sklearn_evaluation import plot
 
@@ -28,7 +29,7 @@ from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 
 from localPkg.datmgmt import DataManager
 
-
+tic()
 #%% PATHS 
 print("Number of processors: ", mp.cpu_count())
 # Path to file
@@ -126,58 +127,65 @@ print("y_test: " + str(np.unique(y_test)))
 #%% RANDOM FOREST ALGORITHM 
 print('Random Forest:')
 
-#%% CREATE RANDOMFOREST PIPELINE
+#%% CREATE RANDOMFOREST PIPELINE (first set vs second set of data)
 # print("starting modeling career...")
 # coef = [671,10,68,3,650,87,462]
-# RFmodel = RandomForestClassifier(max_depth = coef[0], min_samples_split = coef[1], 
+# clf = RandomForestClassifier(max_depth = coef[0], min_samples_split = coef[1], 
 #                                        max_leaf_nodes = coef[2], min_samples_leaf = coef[3],
 #                                        n_estimators = coef[4], max_samples = coef[5],
 #                                        max_features = coef[6])
 
+
+print("starting modeling career...")
+clf = RandomForestClassifier(criterion = 'gini', max_features = 'sqrt', max_samples = 0.5, 
+                              min_samples_leaf = 1, min_samples_split = 2, n_estimators = 900)
+
+
 #%% GRID SEARCH
-print("Gridsearch with cross-validation initializing...")
+# print("Gridsearch with cross-validation initializing...")
 
-#Parameter Grid with ranges
-paraGrid = {'criterion': ['gini','entropy'],
-            'min_samples_leaf': np.arange(1,3,1)}
-            # 'min_samples_split': np.arange(2,20,2),
-            # 'n_estimators': np.arange(100,500,200),
-            # 'max_features': ['auto','sqrt','log2']}
+# #Parameter Grid with ranges
+# paraGrid = {'criterion': ['gini','entropy'],
+#             'min_samples_leaf': np.arange(1,15,1),
+#             'min_samples_split': np.arange(2,20,2),
+#             'n_estimators': np.arange(300,901,200),
+#             'max_features': ['auto','sqrt','log2'],
+#             'max_samples': np.arange(0.1,0.9,0.4)} #18144 fits
+              
+#             # 'max_depth': np.arange(10,210,20),
+#             # 'max_leaf_nodes': np.arange(10,210,50),
 
-             # 'max_depth': np.arange(10,210,20),
-              #'max_leaf_nodes': np.arange(60,210,50)
-              #'max_samples': np.arange(0.1,0.9,0.4)
               
 
 
-#Gridsearch with cross-validation
-rf_gridsearch = GridSearchCV(estimator = RandomForestClassifier(), 
-                        param_grid = paraGrid, 
-                        scoring = 'roc_auc', # can use make_scorer(custom_scoring_function, greater_is_better=True)
-                        cv = 3, 
-                        verbose = 20, 
-                        n_jobs = -1)
+# #Gridsearch with cross-validation
+# rf_gridsearch = GridSearchCV(estimator = RandomForestClassifier(), 
+#                         param_grid = paraGrid, 
+#                         scoring = 'roc_auc', # can use make_scorer(custom_scoring_function, greater_is_better=True)
+#                         cv = 3, 
+#                         verbose = 10, 
+#                         n_jobs = 30)
 
-#Calling Method 
-# plot_grid_search(rf_gridsearch.cv_results_, n_estimators, max_features, 'N Estimators', 'Max Features')
+# #Calling Method 
+# # plot_grid_search(rf_gridsearch.cv_results_, n_estimators, max_features, 'N Estimators', 'Max Features')
 
-rf_gridsearch.fit(X_train,y_train)
-best_score = rf_gridsearch.best_score_
-best_params = rf_gridsearch.best_params_
-print('Best Params: ', best_params)
-print('Best Score: ', best_score)
-print('CV Results: ', rf_gridsearch.cv_results_)
+# rf_gridsearch.fit(X_train,y_train)
+# best_score = rf_gridsearch.best_score_
+# best_params = rf_gridsearch.best_params_
+# print('Best Params: ', best_params)
+# print('Best Score: ', best_score)
+# print('CV Results: ', rf_gridsearch.cv_results_)
 
-#Plotting parameter performance
-print('Plotting Gridsearch Results...')
-grid_scores = rf_gridsearch.cv_results_
+# #Plotting parameter performance
+# print('Plotting Gridsearch Results...')
+# grid_scores = rf_gridsearch.cv_results_
 
-# plt.figure(0)
-# plot.grid_search(grid_scores, change=('min_samples_leaf', 'min_samples_split'),
-#                  subset={'n_estimators': [100]})
+# # plt.figure(0)
+# # plot.grid_search(grid_scores, change=('min_samples_leaf', 'min_samples_split'),
+# #                  subset={'n_estimators': [100]})
 
-# plt.figure(1)
-# plot.grid_search(grid_scores, change='n_estimators', kind='bar')
+# # plt.figure(1)
+# # plot.grid_search(grid_scores, change='n_estimators', kind='bar')
 
 
 #%% BAYESIAN OPTIMIZATION WITH HYPEROPT
@@ -210,7 +218,7 @@ grid_scores = rf_gridsearch.cv_results_
 
 #%% MODEL FITTING
 print('fitting...')
-clf = RandomForestClassifier(**best_params)
+# clf = RandomForestClassifier(**best_params)
 clf.fit(X_train,y_train)
 #y_score = model.decision_function(X_test)
 print(clf.score(X_test,y_test))
@@ -237,10 +245,23 @@ roc_auc_train = auc(fpr_tr, tpr_tr)
 fpr_ts, tpr_ts, threshold = roc_curve(y_test, clf.predict_proba(X_test)[:,1])
 roc_auc_test = auc(fpr_ts, tpr_ts)
 
+#Plot confusion matrix and scores
+tn, fp, fn, tp = confusion_matrix(list(y_test), list(y_predict), labels=[0, 1]).ravel()
+# print('True Positive', tp)
+# print('True Negative', tn)
+# print('False Positive', fp)
+# print('False Negative', fn)
+tot = tn+tp+fp+fn
+print('True Positive Rate', tp/tot)
+print('True Negative Rate', tn/tot)
+print('False Positive Rate', fp/tot)
+print('False Negative Rate', fn/tot)
+# plot_confusion_matrix(clf, y_test, y_predict)
+
 #Plot ROC curve
 plot_roc_curve(roc_auc_train, roc_auc_test)
 
-
+print('Time to run:',toc())
 
 #%% Cross Validate
 # scores = cross_val_score(estimator = model,

@@ -2,7 +2,7 @@
 """
 Created on Wed Jan 13 19:02:19 2021
 
-@author: Jacob Salminen
+@author: jsalm/eduluca
 @version: 1.0.20
 """
 #%% IMPORTS
@@ -17,6 +17,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import dill as pickle
+from ttictoc import tic,toc
 
 from os.path import dirname, join, abspath
 from os import mkdir
@@ -24,7 +25,7 @@ from datetime import date
 from sklearn.svm import SVC
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.pipeline import make_pipeline
-from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc
+from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc,plot_confusion_matrix,confusion_matrix
 from sklearn.preprocessing import RobustScaler
 from sklearn_evaluation import plot
 
@@ -32,6 +33,7 @@ from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 
 from localPkg.datmgmt import DataManager
 
+tic()
 #%% PATHS 
 print("Number of processors: ", mp.cpu_count())
 # Path to file
@@ -155,15 +157,15 @@ print("starting modeling career...")
 print("Gridsearch with cross-validation initializing...")
 
 #Parameter Grid with ranges
-paraGrid = {'C': [0.1, 1], #10, 100, 1000],
-            # 'gamma': [1, 0.1, 0.01, 0.001, 0.0001],
-            'kernel': ['rbf', 'sigmoid', 'linear']}
+paraGrid = {'C': [0.01, 0.1, 1, 10, 100, 1000],
+            'gamma': [1, 0.1, 0.01, 0.001, 0.001],
+            'kernel': ['linear']}#'rbf', 'poly', 'sigmoid', ]} #420
 
 svm_gridsearch = GridSearchCV(estimator = SVC(),
                   param_grid = paraGrid,
                   scoring = 'roc_auc',
-                  cv = 2,
-                  n_jobs = 7,
+                  cv = 3,
+                  n_jobs = 30,
                   verbose = 10)
 
 
@@ -220,8 +222,23 @@ roc_auc_train = auc(fpr_tr, tpr_tr)
 fpr_ts, tpr_ts, threshold = roc_curve(y_test, clf.predict_proba(X_test)[:,1])
 roc_auc_test = auc(fpr_ts, tpr_ts)
 
+#Plot confusion matrix and scores
+tn, fp, fn, tp = confusion_matrix(list(y_test), list(y_predict), labels=[0, 1]).ravel()
+# print('True Positive', tp)
+# print('True Negative', tn)
+# print('False Positive', fp)
+# print('False Negative', fn)
+tot = tn+tp+fp+fn
+print('True Positive Rate', tp/tot)
+print('True Negative Rate', tn/tot)
+print('False Positive Rate', fp/tot)
+print('False Negative Rate', fn/tot)
+# plot_confusion_matrix(clf, y_test, y_predict)
+
 #Plot ROC curve
 plot_roc_curve(roc_auc_train, roc_auc_test)
+
+print('Time to run:',toc())
 #%% CROSS VALIDATION
 # scores = cross_val_score(estimator = model,
 #                           X = X,

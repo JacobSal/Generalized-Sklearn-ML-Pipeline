@@ -2,7 +2,7 @@
 """
 Created on Wed Jan 13 19:02:19 2021
 
-@author: jsalm
+@author: jsalm/eduluca
 """
 
 import numpy as np
@@ -11,10 +11,11 @@ import matplotlib.pyplot as plt
 from os.path import dirname, abspath, join
 from os import mkdir
 import dill as pickle
+from ttictoc import tic,toc
 
 from sklearn.svm import SVC
 from sklearn.model_selection import cross_val_score, GridSearchCV
-from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc
+from sklearn.metrics import accuracy_score,precision_score,recall_score,f1_score,roc_auc_score,roc_curve,auc,plot_confusion_matrix,confusion_matrix
 from sklearn.ensemble import  RandomForestClassifier
 from sklearn_evaluation import plot
 
@@ -24,7 +25,7 @@ from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 
 from localPkg.datmgmt import DataManager
 
-
+tic()
 #%% PATHS 
 print("Number of processors: ", mp.cpu_count())
 # Path to file
@@ -104,36 +105,39 @@ print("y_test: " + str(np.unique(y_test)))
 #%% XGBOOST ALGORITHM 
 print('XGBoost:')
 
-##XGBoost with Optimal HyperParameters
-print("starting modeling career...")
-# coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
-# XGBmodel = XGBClassifier(max_depth = coef[0],subsample = coef[1],n_estimators = coef[2],
-#                       colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate = coef[5], 
-#                       min_child_weight = coef[6], random_state = coef[7],reg_alpha = coef[8],
-#                       reg_lambda = coef[9])
+# ##XGBoost with Optimal HyperParameters
+# print("starting modeling career...")
+# # coef = [2,0.28,150,0.57,0.36,0.1,1,0,0.75,0.42]
+# # clf = XGBClassifier(max_depth = coef[0],subsample = coef[1],n_estimators = coef[2],
+# #                       colsample_bylevel = coef[3], colsample_bytree = coef[4],learning_rate = coef[5], 
+# #                       min_child_weight = coef[6], random_state = coef[7],reg_alpha = coef[8],
+# #                       reg_lambda = coef[9])
 
+
+
+# clf = XGBClassifier(max_depth = 5, learning_rate = 0.1, n_estimators = 200,
+#                     gamma = 0.01, subsample = 0.5, colsample_bylevel = 0.1, colsample_bytree = 0.7)
 #%% GRID SEARCH
 print("Gridsearch with cross-validation initializing...")
 
 #Parameter Grid with ranges
-paraGrid = {'max_depth': np.arange(1,2,1), #(0,9999), typical: 3-10  #15
-            'learning_rate': np.arange(0.1,0.2,0.05)}#(0,1), typical: 0.01-0.2 #0.5
-            # 'n_estimators': np.arange(100,300,100), #[0,9999], 
-            # 'gamma': np.arange(0.01,0.05,0.01)}
-            # 'subsample': np.arange(0.1,1.5,0.1)}
-              # 'colsample_bylevel': [0.5,1], #[0,1] ,
-              # 'colsample_bytree': [0.5,1], #[0,1],
-              #   'min_child_weight': [1,50], #(0,9999),
-              #   'alpha': [0.5,1], #[0,1],
-              #   'lambda': [0.5,1] }#[0,1]}
+paraGrid = {'max_depth': np.arange(1,15,2), #(0,9999), typical: 3-10  #15
+            'learning_rate': np.arange(0.1,0.2,0.05),#(0,1), typical: 0.01-0.2 #0.5
+            'n_estimators': np.arange(100,250,50), #[0,9999], 
+            'gamma': np.arange(0.01,0.05,0.02),
+            'subsample': np.arange(0.1,0.9,0.4),
+            'colsample_bylevel': np.arange(0.1,0.9,0.4), #[0,1] ,
+            'colsample_bytree': np.arange(0.1,0.9,0.2)} #[0,1],
+            # 'alpha': np.arange(0.25,1,0.25), #[0,1],
+            # 'lambda': np.arange(0.25,1,0.25)}#[0,1]}
 
 #Gridsearch with cross-validation
 xgb_gridsearch = GridSearchCV(estimator = XGBClassifier(), 
                         param_grid = paraGrid,
-                        scoring = 'roc_auc',
-                        cv = 2, 
-                        verbose = 20, 
-                        n_jobs = -1)
+                        scoring = 'precision',
+                        cv = 3, 
+                        verbose = 8, 
+                        n_jobs = 30)
 
 #Calling Method 
 # plot_grid_search(rf_gridsearch.cv_results_, n_estimators, max_features, 'N Estimators', 'Max Features')
@@ -201,10 +205,17 @@ y_train_predict = clf.predict(X_train)
 y_predict = clf.predict(X_test)
 print('XGB Train accuracy',accuracy_score(y_train, y_train_predict))
 print('XGB Test accuracy',accuracy_score(y_test,y_predict))
+print('XGB Train precision',precision_score(y_train, y_train_predict))
+print('XGB Test precision',precision_score(y_test,y_predict))
+print('XGB Train recall',recall_score(y_train, y_train_predict))
+print('XGB Test recall',recall_score(y_test,y_predict))
 print('XGB Train F1 Score', f1_score(y_train, y_train_predict))
 print('XGB Test F1 score', f1_score(y_test, y_predict))
 print('XGB Train ROC_AUC Score', roc_auc_score(y_train, clf.predict_proba(X_train)[:,1]))
 print('XGB Test ROC_AUC score', roc_auc_score(y_test, clf.predict_proba(X_test)[:,1]))
+print('Best Params: ', best_params)
+print('Best Score: ', best_score)
+print('CV Results: ', xgb_gridsearch.cv_results_)
 
 #train data ROC
 fpr_tr, tpr_tr, threshold = roc_curve(y_train, clf.predict_proba(X_train)[:,1])
@@ -214,10 +225,23 @@ roc_auc_train = auc(fpr_tr, tpr_tr)
 fpr_ts, tpr_ts, threshold = roc_curve(y_test, clf.predict_proba(X_test)[:,1])
 roc_auc_test = auc(fpr_ts, tpr_ts)
 
+#Plot confusion matrix and scores
+tn, fp, fn, tp = confusion_matrix(list(y_test), list(y_predict), labels=[0, 1]).ravel()
+# print('True Positive', tp)
+# print('True Negative', tn)
+# print('False Positive', fp)
+# print('False Negative', fn)
+tot = tn+tp+fp+fn
+print('True Positive Rate', tp/tot)
+print('True Negative Rate', tn/tot)
+print('False Positive Rate', fp/tot)
+print('False Negative Rate', fn/tot)
+# plot_confusion_matrix(clf, y_test, y_predict)
+
 #Plot ROC curve
 plot_roc_curve(roc_auc_train, roc_auc_test)
 
-
+print('Time to run:',toc())
 #%% CROSS VALIDATE k-fold (k=10)
 # scores = cross_val_score(estimator = model,
 #                           X = X_train,

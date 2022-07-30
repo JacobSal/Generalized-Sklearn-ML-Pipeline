@@ -2,7 +2,7 @@
 """
 Created on Tue Apr 27 20:19:38 2021
 
-@author: jsalm
+@author: jsalm/eduluca
 """
 
 # -*- coding: utf-8 -*-
@@ -25,12 +25,13 @@ import numpy as np
 import matplotlib.pyplot as plt
 import cv2
 import dill as pickle
+from ttictoc import tic,toc
 
 
 from sklearn.model_selection import cross_val_score, GridSearchCV
 from sklearn.pipeline import make_pipeline
 from sklearn.preprocessing import RobustScaler
-from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc
+from sklearn.metrics import accuracy_score,f1_score,roc_auc_score,roc_curve,auc,plot_confusion_matrix,confusion_matrix
 from sklearn.neighbors import KNeighborsClassifier
 from sklearn_evaluation import plot
 
@@ -39,6 +40,7 @@ from hyperopt import STATUS_OK, Trials, fmin, hp, tpe
 from localPkg.preproc import ProcessPipe
 from localPkg.datmgmt import DataManager
 
+tic()
 #%% PATHS 
 print("Number of processors: ", mp.cpu_count())
 # Path to file
@@ -122,38 +124,39 @@ print('KNN:')
 #%% KNN MODEL FITTING
 #we create an instance of KNN and fit out data.
 print("starting modeling career...")
+clf = KNeighborsClassifier(n_neighbors = 30, weights = 'distance', metric = 'euclidean')
 
 #%% GRIDSEARCH
-print("Gridsearch with cross-validation initializing...")
+# print("Gridsearch with cross-validation initializing...")
 
-#Parameter Grid with ranges
-paraGrid = {'n_neighbors': np.arange(1,5,2),
-            'weights': ['uniform', 'distance']}
-            # 'metric': ['euclidean', 'manhattan']}
+# #Parameter Grid with ranges
+# paraGrid = {'n_neighbors': np.arange(1,31,1),
+#             'weights': ['uniform', 'distance','minkowski'],
+#              'metric': ['euclidean', 'manhattan']}
 
-knn_gridsearch = GridSearchCV(estimator = KNeighborsClassifier(),
-                  param_grid = paraGrid,
-                  scoring = 'roc_auc',
-                  cv = 2,
-                  n_jobs = -1,
-                  verbose = 20)
+# knn_gridsearch = GridSearchCV(estimator = KNeighborsClassifier(),
+#                   param_grid = paraGrid,
+#                   scoring = 'roc_auc',
+#                   cv = 3,
+#                   n_jobs = 30,
+#                   verbose = 10)
 
 
-knn_gridsearch.fit(X_train,y_train)
-best_score = knn_gridsearch.best_score_
-best_params = knn_gridsearch.best_params_
-print('Best Params: ', best_params)
-print('Best Score: ', best_score)
-print('CV Results: ', knn_gridsearch.cv_results_)
+# knn_gridsearch.fit(X_train,y_train)
+# best_score = knn_gridsearch.best_score_
+# best_params = knn_gridsearch.best_params_
+# print('Best Params: ', best_params)
+# print('Best Score: ', best_score)
+# print('CV Results: ', knn_gridsearch.cv_results_)
 
-#Plotting parameter performance
-print('Plotting Gridsearch Results...')
-grid_scores = knn_gridsearch.cv_results_
+# #Plotting parameter performance
+# print('Plotting Gridsearch Results...')
+# grid_scores = knn_gridsearch.cv_results_
 
 
 #%% MODEL FITTING
 print('fitting...')
-clf = KNeighborsClassifier(**best_params)
+# clf = KNeighborsClassifier(**best_params)
 clf.fit(X_train,y_train)
 #y_score = model.decision_function(X_test)
 print(clf.score(X_test,y_test))
@@ -180,8 +183,23 @@ roc_auc_train = auc(fpr_tr, tpr_tr)
 fpr_ts, tpr_ts, threshold = roc_curve(y_test, clf.predict_proba(X_test)[:,1])
 roc_auc_test = auc(fpr_ts, tpr_ts)
 
+#Plot confusion matrix and scores
+tn, fp, fn, tp = confusion_matrix(list(y_test), list(y_predict), labels=[0, 1]).ravel()
+# print('True Positive', tp)
+# print('True Negative', tn)
+# print('False Positive', fp)
+# print('False Negative', fn)
+tot = tn+tp+fp+fn
+print('True Positive Rate', tp/tot)
+print('True Negative Rate', tn/tot)
+print('False Positive Rate', fp/tot)
+print('False Negative Rate', fn/tot)
+# plot_confusion_matrix(clf, y_test, y_predict)
+
 #Plot ROC curve
 plot_roc_curve(roc_auc_train, roc_auc_test)
+
+print('Time to run:',toc())
 #%% CROSS VALIDATE
 # scores = cross_val_score(estimator = pipe_knn,
 #                           X = X,
